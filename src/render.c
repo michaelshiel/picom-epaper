@@ -14,6 +14,7 @@
 
 #ifdef CONFIG_OPENGL
 #include "backend/gl/glx.h"
+#include "backend/gl/gl_common.h"
 #include "opengl.h"
 
 #ifndef GLX_BACK_BUFFER_AGE_EXT
@@ -40,6 +41,21 @@
 #define XRFILTER_CONVOLUTION "convolution"
 #define XRFILTER_GAUSSIAN "gaussian"
 #define XRFILTER_BINOMIAL "binomial"
+
+GLuint localprog = 0;
+GLuint blendprog = 0;
+float quadVertices[] = { // vertex attributes for a quad that fills the entire screen in Normalized Device Coordinates.
+  // positions   // texCoords
+  -1.0f,  1.0f,  0.0f, 1.0f,
+  -1.0f, -1.0f,  0.0f, 0.0f,
+  1.0f, -1.0f,  1.0f, 0.0f,
+
+  -1.0f,  1.0f,  0.0f, 1.0f,
+  1.0f, -1.0f,  1.0f, 0.0f,
+  1.0f,  1.0f,  1.0f, 1.0f
+};
+
+unsigned int quadVAO, quadVBO;
 
 /**
  * Bind texture in paint_t if we are using GLX backend.
@@ -1031,6 +1047,8 @@ void paint_all(session_t *ps, struct managed_win *t, bool ignore_damage) {
 #ifdef CONFIG_OPENGL
 	if (bkend_use_glx(ps)) {
 		ps->psglx->z = 0.0;
+		// Bind our screen fb here
+		glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
 	}
 #endif
 
@@ -1268,7 +1286,39 @@ void paint_all(session_t *ps, struct managed_win *t, bool ignore_damage) {
 		glx_render(ps, ps->tgt_buffer.ptex, 0, 0, 0, 0, ps->root_width,
 		           ps->root_height, 0, 1.0, false, false, &region, NULL);
 		fallthrough();
-	case BKEND_GLX: glXSwapBuffers(ps->dpy, get_tgt_window(ps)); break;
+	case BKEND_GLX:
+	  //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	  // render to intermediate fb
+	  glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[1]);
+	  glUseProgram(blendprog);
+	  glBindVertexArray(quadVAO);
+	  
+	  glActiveTexture(GL_TEXTURE0);
+	  glBindTexture(GL_TEXTURE_2D, ps->textures[0]);
+
+	  glActiveTexture(GL_TEXTURE1);
+	  glBindTexture(GL_TEXTURE_2D, ps->textures[1]);
+	  
+	  glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	  // present output to display
+	  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	  glUseProgram(localprog);
+	  //glClearColor(0.5, 0.5, 0.0, 1.0);
+	  //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	  glActiveTexture(GL_TEXTURE0);
+	  glBindVertexArray(quadVAO);
+	  glBindTexture(GL_TEXTURE_2D, ps->textures[1]);
+	  glDrawArrays(GL_TRIANGLES, 0, 6);
+	  
+	  glXSwapBuffers(ps->dpy, get_tgt_window(ps));
+
+	  glBindTexture(GL_TEXTURE_2D, 0);
+	  glBindVertexArray(0);
+	  glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
+	  glUseProgram(0);
+	  break;
 #endif
 	default: assert(0);
 	}
@@ -1343,6 +1393,8 @@ static bool init_alpha_picts(session_t *ps) {
 	return true;
 }
 
+
+
 bool init_render(session_t *ps) {
 	if (ps->o.backend == BKEND_DUMMY) {
 		return false;
@@ -1365,6 +1417,114 @@ bool init_render(session_t *ps) {
 	// Initialize VSync
 	if (!vsync_init(ps)) {
 		return false;
+	}
+
+	// eink init
+	if(BKEND_GLX == ps->o.backend) {
+	  printf("eink init begin\n");
+
+	  localprog = gl_create_program_from_str("#version 330 core \n\
+layout (location = 0) in vec2 aPos; \n\
+layout (location = 1) in vec2 aTexCoords; \n\
+out vec2 TexCoords; \
+\
+void main() \
+{ \
+    TexCoords = aTexCoords; \
+    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);  \
+}\n\n", "#version 330 core \n\
+out vec4 FragColor; \n\
+\
+in vec2 TexCoords; \n\
+\n\
+uniform sampler2D tex; \n\
+\n\
+float q = 16.0; \n\
+\n\
+void main() \n\
+{ \n\
+vec4 c = texture2D(tex, TexCoords); \n\
+        float y = dot(c.rgb, vec3(0.299, 0.587, 0.114)); \n\
+        vec3 color_resolution = vec3(q); \n\
+        vec3 color_bands = floor(y * color_resolution) / (color_resolution - 1.0); \n\
+        FragColor = vec4(color_bands, 1.0); \n\
+}\n\n");
+
+	  blendprog = gl_create_program_from_str("#version 330 core \n\
+layout (location = 0) in vec2 aPos; \n\
+layout (location = 1) in vec2 aTexCoords; \n\
+out vec2 TexCoords; \
+\
+void main() \
+{ \
+    TexCoords = aTexCoords; \
+    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);  \
+}\n\n", "#version 330 core \n\
+out vec4 FragColor; \n\
+\
+in vec2 TexCoords; \n\
+\n\
+uniform sampler2D tex1; \n\
+uniform sampler2D tex2; \n\
+\n\
+void main() \n\
+{ \n\
+    vec3 col = texture(tex1, TexCoords).rgb * 0.2 + texture(tex2, TexCoords).rgb * 0.8; \n\
+    FragColor = vec4(col, 1.0); \n\
+}\n\n");
+
+	  gl_check_err();
+
+	  glUseProgram(blendprog);
+	  GLint loc = glGetUniformLocation(blendprog, "tex2");
+	  printf("loc = %d\n", loc);
+	  glUniform1i(loc, 1);
+	  glUseProgram(0);
+
+	  gl_check_err();
+
+	  glGenVertexArrays(1, &quadVAO);
+	  glGenBuffers(1, &quadVBO);
+	  glBindVertexArray(quadVAO);
+	  glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+	  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+	  glEnableVertexAttribArray(0);
+	  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+	  glEnableVertexAttribArray(1);
+	  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+
+	  printf("quad %d %d\n", quadVAO, quadVBO);
+	  
+	  glGenFramebuffers(2, &ps->fbs[0]);
+
+	  for(int i = 0; i < 2; i++) {
+	    glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[i]);
+	    
+	    // create a color attachment texture
+	    glGenTextures(1, &ps->textures[i]);
+	    glActiveTexture(GL_TEXTURE0);
+	    glBindTexture(GL_TEXTURE_2D, ps->textures[i]);
+
+	    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, ps->root_width, ps->root_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	    
+	    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ps->textures[i], 0);
+
+	    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+	      printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
+	    } else {
+	      printf("framebuffer %d looking good\n", i);
+	    }
+
+	    printf("fb = %d, tex = %d\n", ps->fbs[i], ps->textures[i]);
+	  }
+
+	  glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
+	  glBindVertexArray(0);
+	  glBindBuffer(GL_ARRAY_BUFFER, 0);
+	  
+	  printf("eink init done\n");
 	}
 
 	// Initialize window GL shader

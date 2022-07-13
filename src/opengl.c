@@ -1017,7 +1017,7 @@ bool glx_blur_dst(session_t *ps, int dx, int dy, int width, int height, float z,
 				goto glx_blur_dst_end;
 			}
 		} else {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
 			glDrawBuffer(GL_BACK);
 			if (have_scissors)
 				glEnable(GL_SCISSOR_TEST);
@@ -1084,7 +1084,7 @@ bool glx_blur_dst(session_t *ps, int dx, int dy, int width, int height, float z,
 	ret = true;
 
 glx_blur_dst_end:
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
 	glBindTexture(tex_tgt, 0);
 	glDisable(tex_tgt);
 	if (have_scissors)

@@ -212,6 +212,10 @@ typedef struct session {
 	// XXX should be in struct glx_session
 	glx_prog_main_t glx_prog_win;
 	struct glx_fbconfig_info *argb_fbconfig;
+	// eink start
+	GLuint fbs[2]; // 0 = regular screen, 1 = output
+        GLuint textures[2];
+	// eink end
 #endif
 	/// Sync fence to sync draw operations
 	xcb_sync_fence_t sync_fence;
