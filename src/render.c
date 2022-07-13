@@ -1440,14 +1440,15 @@ in vec2 TexCoords; \n\
 uniform sampler2D tex; \n\
 \n\
 float q = 16.0; \n\
+vec3 white = vec3(0.729, 0.737, 0.753); \n\
+vec3 black = vec3(0.247, 0.255, 0.271); \n\
 \n\
 void main() \n\
 { \n\
 vec4 c = texture2D(tex, TexCoords); \n\
-        float y = dot(c.rgb, vec3(0.299, 0.587, 0.114)); \n\
-        vec3 color_resolution = vec3(q); \n\
-        vec3 color_bands = floor(y * color_resolution) / (color_resolution - 1.0); \n\
-        FragColor = vec4(color_bands, 1.0); \n\
+        float grayscale = dot(c.rgb, vec3(0.299, 0.587, 0.114)); \n\
+        float quantized = floor(grayscale * q) / (q - 1.0); \n\
+        FragColor = vec4(mix(black.r, white.r, quantized), mix(black.r, white.r, quantized), mix(black.b, white.b, quantized), 1.0); \n\
 }\n\n");
 
 	  blendprog = gl_create_program_from_str("#version 330 core \n\
