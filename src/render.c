@@ -1393,6 +1393,31 @@ static bool init_alpha_picts(session_t *ps) {
 	return true;
 }
 
+char * read_file(const char *filename) {
+  FILE *f = fopen(filename, "rb");
+  fseek(f, 0, SEEK_END);
+  unsigned long fsize = (unsigned long)ftell(f);
+  fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
+
+  char *string = malloc(fsize + 1);
+  fread(string, fsize, 1, f);
+  fclose(f);
+
+  string[fsize] = 0;
+
+  return string;
+}
+
+GLuint create_program(const char *vertexFilename, const char *fragmentFilename) {
+  char *vs = read_file(vertexFilename);
+  char *fs = read_file(fragmentFilename);
+
+  GLuint programID = gl_create_program_from_str(vs, fs);
+
+  gl_check_err();
+
+  return programID;
+}
 
 
 bool init_render(session_t *ps) {
@@ -1423,58 +1448,8 @@ bool init_render(session_t *ps) {
 	if(BKEND_GLX == ps->o.backend) {
 	  printf("eink init begin\n");
 
-	  localprog = gl_create_program_from_str("#version 330 core \n\
-layout (location = 0) in vec2 aPos; \n\
-layout (location = 1) in vec2 aTexCoords; \n\
-out vec2 TexCoords; \
-\
-void main() \
-{ \
-    TexCoords = aTexCoords; \
-    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);  \
-}\n\n", "#version 330 core \n\
-out vec4 FragColor; \n\
-\
-in vec2 TexCoords; \n\
-\n\
-uniform sampler2D tex; \n\
-\n\
-float q = 16.0; \n\
-vec3 white = vec3(0.729, 0.737, 0.753); \n\
-vec3 black = vec3(0.247, 0.255, 0.271); \n\
-\n\
-void main() \n\
-{ \n\
-vec4 c = texture2D(tex, TexCoords); \n\
-        float grayscale = dot(c.rgb, vec3(0.299, 0.587, 0.114)); \n\
-        float quantized = floor(grayscale * q) / (q - 1.0); \n\
-        FragColor = vec4(mix(black.r, white.r, quantized), mix(black.r, white.r, quantized), mix(black.b, white.b, quantized), 1.0); \n\
-}\n\n");
-
-	  blendprog = gl_create_program_from_str("#version 330 core \n\
-layout (location = 0) in vec2 aPos; \n\
-layout (location = 1) in vec2 aTexCoords; \n\
-out vec2 TexCoords; \
-\
-void main() \
-{ \
-    TexCoords = aTexCoords; \
-    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);  \
-}\n\n", "#version 330 core \n\
-out vec4 FragColor; \n\
-\
-in vec2 TexCoords; \n\
-\n\
-uniform sampler2D tex1; \n\
-uniform sampler2D tex2; \n\
-\n\
-void main() \n\
-{ \n\
-    vec3 col = texture(tex1, TexCoords).rgb * 0.2 + texture(tex2, TexCoords).rgb * 0.8; \n\
-    FragColor = vec4(col, 1.0); \n\
-}\n\n");
-
-	  gl_check_err();
+	  localprog = create_program("presentation.vs", "presentation.fs");
+	  blendprog = create_program("blend.vs", "blend.fs");
 
 	  glUseProgram(blendprog);
 	  GLint loc = glGetUniformLocation(blendprog, "tex2");
