@@ -1453,7 +1453,6 @@ bool init_render(session_t *ps) {
 
 	  glUseProgram(blendprog);
 	  GLint loc = glGetUniformLocation(blendprog, "tex2");
-	  printf("loc = %d\n", loc);
 	  glUniform1i(loc, 1);
 	  glUseProgram(0);
 
@@ -1469,32 +1468,46 @@ bool init_render(session_t *ps) {
 	  glEnableVertexAttribArray(1);
 	  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 
-	  printf("quad %d %d\n", quadVAO, quadVBO);
-	  
 	  glGenFramebuffers(2, &ps->fbs[0]);
+	  glGenTextures(2, &ps->textures[0]);
+	  
+	  // Configure output framebuffer
+	  glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
+	  glActiveTexture(GL_TEXTURE0);
+	  glBindTexture(GL_TEXTURE_2D, ps->textures[0]);
 
-	  for(int i = 0; i < 2; i++) {
-	    glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[i]);
+	  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ps->root_width, ps->root_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 	    
-	    // create a color attachment texture
-	    glGenTextures(1, &ps->textures[i]);
-	    glActiveTexture(GL_TEXTURE0);
-	    glBindTexture(GL_TEXTURE_2D, ps->textures[i]);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ps->textures[0], 0);
 
-	    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, ps->root_width, ps->root_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-	    
-	    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ps->textures[i], 0);
-
-	    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-	      printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
-	    } else {
-	      printf("framebuffer %d looking good\n", i);
-	    }
-
-	    printf("fb = %d, tex = %d\n", ps->fbs[i], ps->textures[i]);
+	  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+	    printf("ERROR::FRAMEBUFFER:: Output Framebuffer is not complete!\n");
+	    exit(-1);
 	  }
+
+	  // Configure internal framebuffer
+	  glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[1]);
+	    
+	  // create a color attachment texture
+	  glActiveTexture(GL_TEXTURE0);
+	  glBindTexture(GL_TEXTURE_2D, ps->textures[1]);
+	  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ps->root_width, ps->root_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	  
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ps->textures[1], 0);
+
+	  gl_check_err();
+
+	  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+	    printf("ERROR::FRAMEBUFFER:: Internal Framebuffer is not complete!\n");
+	    exit(-1);
+	  }
+
+	  glClearColorIuiEXT(255, 255, 1, 0);
+	  glClear(GL_COLOR_BUFFER_BIT);
 
 	  glBindFramebuffer(GL_FRAMEBUFFER, ps->fbs[0]);
 	  glBindVertexArray(0);

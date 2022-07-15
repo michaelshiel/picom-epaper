@@ -7,12 +7,11 @@ uniform sampler2D tex1;
 uniform sampler2D tex2;
 
 const vec3 weights = vec3(0.299, 0.587, 0.114);
-const float quantization_levels = 16.0;
-const float speed = 0.5;
+const uint quantization = 16u;
 
 const float lut[8] = float[](
-      1.0, -1.0, 1.0, 1.0, // black -> white
-      1.0, 1.0, -1.0, -1.0 // white -> black
+      1.0, 0.0, 0.5, 1.0, // black -> white
+      0.0, 1.0, 0.5, 0.0 // white -> black
 );
 
 // r = screen value (i.e. the level the panel has)
@@ -22,37 +21,38 @@ const float lut[8] = float[](
 
 void main()
 {
-    vec4 data = texture(tex2, TexCoords);
+  vec4 data = texture(tex2, TexCoords);
 
-    float screenPixel = data.r;
-    float desiredPixel = data.g;
-    int cycle = int(data.b);
-    int table = int(data.a);
-        
-    if(cycle != 0) {
-    	  float lut_value = lut[(table * 4) + int(cycle / 10)];
-	  //screenPixel += (speed * lut_value);
+  uint screenPixel = uint(data.r * 255.0);
+  uint desiredPixel = uint(data.g * 255.0);
+  uint cycle = uint(data.b * 255.0);
+  uint table = uint(data.a * 255.0);
 
-	  float e = desiredPixel - screenPixel;
-	  screenPixel += e * 0.8;
-	  screenPixel = lut_value;
-	  
-	  cycle--;
+  if(cycle > 0u) {
+    float lut_value = lut[(table * 4u) + (cycle/5u)];
+    cycle--;
+ 
+    if(cycle > 1u) {
+      screenPixel = uint(lut_value * 255);
     } else {
-        float newPixel = dot(texture(tex1, TexCoords).rgb, weights); // Weighted grayscale
-    	newPixel = floor(newPixel * quantization_levels) / (quantization_levels - 1.0); // Quantization
-	
-        if(newPixel != desiredPixel) {
-	    cycle = 40;
-	    if(newPixel > desiredPixel) {
-	        table = 0;
-	    } else {
-	        table = 1;
-	    }
-
-	    desiredPixel = newPixel;
-	}
+      screenPixel = desiredPixel;
     }
+  } else {
+    uint newPixel = uint(dot(texture(tex1, TexCoords).rgb, weights) * 255.0); // Weighted grayscale
+    uint factor = (256u / quantization);
+    newPixel = (newPixel / factor) * factor; // Quantization
+	
+    if(abs(newPixel - desiredPixel) > (128u / quantization)) {
+      cycle = 20u;
+      if(newPixel >= desiredPixel) {
+	table = 0u;
+      } else {
+	table = 1u;
+      }
 
-    FragColor = vec4(screenPixel, desiredPixel, cycle, table);
+      desiredPixel = newPixel;
+    }
+  }
+
+  FragColor = vec4(screenPixel / 255.0, desiredPixel / 255.0, cycle / 255.0, table / 255.0);
 }

@@ -5,18 +5,18 @@ in vec2 TexCoords;
 
 uniform sampler2D tex;
 
-vec3 white = vec3(0.729, 0.737, 0.753);
-vec3 black = vec3(0.247, 0.255, 0.271);
+vec3 white = vec3(0.829, 0.837, 0.853);
+vec3 black = vec3(0.147, 0.155, 0.171);
 
 void main()
 {
-    vec4 c = texture2D(tex, TexCoords);
+    vec4 c = texture(tex, TexCoords);
     float pixel = c.r;
     
     FragColor = vec4(
-    	      pixel, //mix(black.r, white.r, pixel),
-	      pixel, //mix(black.g, white.g, pixel),
-	      pixel, //mix(black.b, white.b, pixel),
+    	      mix(black.r, white.r, pixel),
+	      mix(black.g, white.g, pixel),
+	      mix(black.b, white.b, pixel),
 	      1.0
     );
 }

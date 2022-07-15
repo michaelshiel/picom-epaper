@@ -182,6 +182,7 @@ static inline void gl_check_err_(const char *func, int line) {
 			log_printf(tls_logger, LOG_LEVEL_ERROR, func,
 			           "GLX error at line %d: %d", line, err);
 		}
+		exit(-1);
 	}
 }
 
